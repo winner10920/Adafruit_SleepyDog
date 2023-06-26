@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+
+
 class WatchdogSAMD {
 public:
   WatchdogSAMD() : _initialized(false) {}
@@ -37,9 +39,11 @@ public:
   // returned.
   int sleep(int maxPeriodMS = 0);
 
+  bool getEarlyWarningTriggered();
+  bool setEarlyWarningTriggered(bool value);
+
 private:
   void _initialize_wdt();
-
   bool _initialized;
 };
 

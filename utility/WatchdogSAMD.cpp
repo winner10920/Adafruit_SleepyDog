@@ -3,6 +3,8 @@
 // Be careful to use a platform-specific conditional include to only make the
 // code visible for the appropriate platform.  Arduino will try to compile and
 // link all .cpp files regardless of platform.
+volatile bool _earlyWarningTriggered;
+
 #if defined(ARDUINO_ARCH_SAMD)
 
 #include "WatchdogSAMD.h"
@@ -130,13 +132,15 @@ int WatchdogSAMD::enable(int maxPeriodMS, bool isForSleep) {
     while (WDT->STATUS.bit.SYNCBUSY)
       ; // Sync CTRL write
   } else {
-    WDT->INTENCLR.bit.EW = 1;   // Disable early warning interrupt
+    //WDT->INTENCLR.bit.EW = 1;   // Disable early warning interrupt
     WDT->CONFIG.bit.PER = bits; // Set period for chip reset
+    WDT->EWCTRL.bit.EWOFFSET = 0xA;  // Set early warning offset to 2nd to last option
+    WDT->INTENSET.bit.EW = 1;      // Enable early warning interrupt
     WDT->CTRL.bit.WEN = 0;      // Disable window mode
     while (WDT->STATUS.bit.SYNCBUSY)
       ; // Sync CTRL write
   }
-
+  _earlyWarningTriggered = false;
   reset();                  // Clear watchdog interval
   WDT->CTRL.bit.ENABLE = 1; // Start watchdog now!
   while (WDT->STATUS.bit.SYNCBUSY)
@@ -181,17 +185,31 @@ void WatchdogSAMD::disable() {
 
 void WDT_Handler(void) {
   // ISR for watchdog early warning, DO NOT RENAME!
+if(!_earlyWarningTriggered){
+
 #if defined(__SAMD51__)
   WDT->CTRLA.bit.ENABLE = 0; // Disable watchdog
   while (WDT->SYNCBUSY.reg)
     ;
 #else
-  WDT->CTRL.bit.ENABLE = 0; // Disable watchdog
-  while (WDT->STATUS.bit.SYNCBUSY)
-    ; // Sync CTRL write
+ // WDT->CTRL.bit.ENABLE = 0; // Disable watchdog
+ // while (WDT->STATUS.bit.SYNCBUSY)
+ //   ; // Sync CTRL write
 #endif
+  while (WDT->STATUS.bit.SYNCBUSY)
+    ;
+  WDT->CLEAR.reg = WDT_CLEAR_CLEAR_KEY;
   WDT->INTFLAG.bit.EW = 1; // Clear interrupt flag
+  _earlyWarningTriggered = true;
+  // put code here to save what causee reset
+
+} else{
+  //do nothing and let reset?
+  WDT->INTFLAG.bit.EW = 1; // Clear interrupt flag
+
 }
+}
+
 
 int WatchdogSAMD::sleep(int maxPeriodMS) {
 
@@ -281,6 +299,19 @@ void WatchdogSAMD::_initialize_wdt() {
 #endif
 
   _initialized = true;
+  _earlyWarningTriggered = false;
+}
+
+
+
+bool WatchdogSAMD::getEarlyWarningTriggered(){
+
+return _earlyWarningTriggered;
+}
+
+bool WatchdogSAMD::setEarlyWarningTriggered(bool value){
+
+  _earlyWarningTriggered = value;
 }
 
 #endif // defined(ARDUINO_ARCH_SAMD)
